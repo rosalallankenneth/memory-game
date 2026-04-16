@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Memory Match Game</title>
+  <style>
+    body {
+      font-family: Arial;
+      text-align: center;
+      margin: 0;
+      padding: 40px 20px 80px;
+      min-height: 100vh;
+
+      background: linear-gradient(
+        135deg,
+        #0b1220,
+        #111827,
+        #1f2937
+      );
+
+      color: #f9fafb;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 80px);
+      gap: 10px;
+      justify-content: center;
+      margin-top: 20px;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      width: 80px;
+      height: 80px;
+      background: #444;
+      color: white;
+      font-size: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+
+      transition: transform 0.15s ease, background 0.2s ease;
+    }
+
+    .card:hover {
+      transform: scale(1.05);
+    }
+
+    .flipped {
+      background: orange;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Memory Match 🧠</h1>
+
+  <h2>Score: <span id="score">0</span></h2>
+
+  <h2 id="winMessage" style="display:none; color: green;"></h2>
+  <h3 id="bestTimeText"></h3>
+
+  <button onclick="restartGame()" style="padding:10px; font-size:16px;">
+    🔁 Restart Game
+  </button>
+
+  <h2>Time: <span id="time">0</span> seconds</h2>
+
+  <h3>Select Difficulty</h3>
+
+  <button onclick="setDifficulty('easy')">Easy</button>
+  <button onclick="setDifficulty('medium')">Medium</button>
+  <button onclick="setDifficulty('hard')">Hard</button>
+
+  <div class="grid" id="grid"></div>
+
+  <script>
+    let difficulty = "easy";
+
+    const emojiPool = [
+      "🍎","🍌","🍇","🍒",
+      "🍓","🍍","🥝","🍉",
+      "🍑","🍋","🍊","🥥"
+    ];
+    let lockBoard = false;
+
+    let bestTimes = JSON.parse(localStorage.getItem("bestTimes")) || {
+      easy: null,
+      medium: null,
+      hard: null
+    };
+
+    const grid = document.getElementById("grid");
+    const scoreDisplay = document.getElementById("score");
+    const winMessage = document.getElementById("winMessage");
+    const bestTimeText = document.getElementById("bestTimeText");
+    const timeDisplay = document.getElementById("time");
+
+    let score = 0;
+    let firstCard = null;
+    let secondCard = null;
+
+    let time = 0;
+    let timerStarted = false;
+    let timerInterval = null;
+
+    // base card set
+    let cards = ["🍎","🍎","🍌","🍌","🍇","🍇","🍒","🍒"];
+
+
+    /* ---------------- TIMER ---------------- */
+    function startTimer() {
+      timerStarted = true;
+
+      timerInterval = setInterval(() => {
+        time++;
+        timeDisplay.innerText = time;
+      }, 1000);
+    }
+
+    function resetTimer() {
+      time = 0;
+      timerStarted = false;
+      timeDisplay.innerText = time;
+
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    /* ---------------- CARD FACTORY ---------------- */
+    function createCard(emoji) {
+      const card = document.createElement("div");
+      card.classList.add("card");
+      card.dataset.value = emoji;
+      card.innerText = "";
+
+      card.addEventListener("click", () => handleCardClick(card, emoji));
+
+      return card;
+    }
+
+    /* ---------------- GAME LOGIC ---------------- */
+    function handleCardClick(card, emoji) {
+      if (lockBoard) return;
+      if (card.classList.contains("flipped")) return;
+
+      if (!timerStarted) startTimer();
+
+      card.innerText = emoji;
+      card.classList.add("flipped");
+
+      if (!firstCard) {
+        firstCard = card;
+        return;
+      }
+
+      secondCard = card;
+      lockBoard = true;
+
+      setTimeout(checkMatch, 800);
+    }
+
+    function checkMatch() {
+      if (firstCard.dataset.value === secondCard.dataset.value) {
+        score++;
+        scoreDisplay.innerText = score;
+
+        let requiredMatches = cards.length / 2;
+
+        if (score === requiredMatches) {
+          endGame();
+        }
+      } else {
+        resetCards();
+      }
+
+      firstCard = null;
+      secondCard = null;
+      lockBoard = false;
+    }
+
+    /* ---------------- MATCH HELPERS ---------------- */
+    function resetCards() {
+      firstCard.innerText = "";
+      secondCard.innerText = "";
+
+      firstCard.classList.remove("flipped");
+      secondCard.classList.remove("flipped");
+    }
+
+    /* ---------------- GAME FLOW ---------------- */
+    function endGame() {
+      clearInterval(timerInterval);
+
+      winMessage.style.display = "block";
+      winMessage.innerText = `🎉 YOU WIN in ${time} seconds!`;
+
+      const currentBest = bestTimes[difficulty];
+
+      if (!currentBest || time < currentBest) {
+        bestTimes[difficulty] = time;
+        localStorage.setItem("bestTimes", JSON.stringify(bestTimes));
+      }
+
+      bestTimeText.innerText = bestTime
+        ? `🏆 Best Time: ${bestTime} seconds`
+        : "";
+        
+      updateBestTimeUI();
+    }
+
+    function startGame() {
+      grid.innerHTML = "";
+
+      let pairCount = 4;
+
+      if (difficulty === "easy") pairCount = 4;
+      if (difficulty === "medium") pairCount = 8;
+      if (difficulty === "hard") pairCount = 12;
+
+      let selectedEmojis = emojiPool.slice(0, pairCount);
+      cards = [...selectedEmojis, ...selectedEmojis];
+
+      cards.sort(() => 0.5 - Math.random());
+
+      cards.forEach((emoji) => {
+        grid.appendChild(createCard(emoji));
+      });
+      
+      updateBestTimeUI();
+    }
+
+    /* ---------------- RESTART ---------------- */
+    function restartGame() {
+      resetTimer();
+
+      score = 0;
+      scoreDisplay.innerText = score;
+
+      winMessage.style.display = "none";
+
+      firstCard = null;
+      secondCard = null;
+      lockBoard = false;
+
+      startGame();
+    }
+
+    function setDifficulty(level) {
+      difficulty = level;
+      restartGame();
+    }
+    function updateBestTimeUI() {
+      const best = bestTimes[difficulty];
+
+      bestTimeText.innerText = best
+        ? `🏆 Best Time (${difficulty}): ${best} seconds`
+        : `🏆 No record yet for ${difficulty}`;
+    }
+    /* ---------------- INIT ---------------- */
+    startGame();
+  </script>
+</body>
+</html>
